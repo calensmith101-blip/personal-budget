@@ -1,55 +1,26 @@
-# MoneyMate Colour Budget App
+# MoneyMate New Layout
 
-A brighter Vercel-ready personal budget app.
+Updated to match your requested layout:
 
-## Features
+- Charts and graphs at the top of the dashboard
+- Income and bills underneath the charts
+- Separate pages:
+  - Dashboard
+  - Add Bills
+  - Income
+  - Calendar
+  - Tax
+  - Tools & Resources
+- Income can be edited
+- Tools, calculators and exports kept
+- Vercel ready
+- Valid manifest included
 
-- Colourful dashboard
-- Bills and subscriptions
-- Upcoming and previous/paid bills
-- Recurring bills with roll-forward
-- Calendar view
-- Income tracking
-- Monthly leftover estimate
-- Category spending bars
-- Safety buffer
-- Savings goals
-- Money pots
-- Debt tracker
-- Wish list / planned purchases
-- Backup and restore JSON
-- Calendar export `.ics`
-- Print / save as PDF
-- Home Assistant iframe panel notes
-- Home Assistant webhook setting
-
-## Run
+Run:
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open:
-
-```text
-http://localhost:3000
-```
-
-## Vercel
-
-Upload the full folder to GitHub, then import it into Vercel as a Next.js project.
-
-## Home Assistant iframe
-
-```yaml
-panel_iframe:
-  moneymate:
-    title: MoneyMate
-    icon: mdi:cash-clock
-    url: https://YOUR-VERCEL-APP.vercel.app
-```
-
-## Note
-
-This version uses browser localStorage. That is simple and easy for Vercel. For real cross-device live syncing, the next upgrade should add Supabase login/database.
+Deploy by pushing this folder to GitHub/Vercel.

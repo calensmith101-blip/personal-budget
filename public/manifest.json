@@ -1,12 +1,12 @@
 {
-  "name": "MoneyMate Colour Budget",
+  "name": "MoneyMate Dashboard",
   "short_name": "MoneyMate",
-  "description": "Bright budget, bills, calendar and savings dashboard.",
+  "description": "Budget dashboard with charts, bills, income, calendar, tax and tools.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#fff7ed",
-  "theme_color": "#f97316",
+  "background_color": "#f8fafc",
+  "theme_color": "#14b8a6",
   "icons": [
     {
       "src": "/icon-192.png",
@@ -25,12 +25,6 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
-    },
-    {
-      "src": "/monochrome-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "monochrome"
     }
   ]
 }
