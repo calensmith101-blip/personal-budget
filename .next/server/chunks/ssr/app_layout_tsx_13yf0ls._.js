@@ -1,3 +1,0 @@
-module.exports=[33290,a=>{"use strict";var b=a.i(7997);a.s(["default",0,function({children:a}){return(0,b.jsx)("html",{lang:"en-AU",children:(0,b.jsx)("body",{children:a})})},"metadata",0,{title:"MoneyMate Colour Budget",description:"Bright personal budget app with bills, calendar, goals, debts, subscriptions and Home Assistant links.",manifest:"/manifest.json"},"viewport",0,{themeColor:"#f97316",width:"device-width",initialScale:1}])},70864,a=>{a.n(a.i(33290))}];
-
-//# sourceMappingURL=app_layout_tsx_13yf0ls._.js.map
