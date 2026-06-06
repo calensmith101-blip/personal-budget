@@ -1,59 +1,530 @@
-import React, { useMemo, useState, useEffect } from 'react';
-import { BarChart3, CalendarDays, Download, FileSpreadsheet, Plus, Save, Settings, Trash2, Upload, Wallet, Bell, Banknote, Calculator, ReceiptText, AlertTriangle } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  ArrowDownToLine,
+  Banknote,
+  Bell,
+  Download,
+  Landmark,
+  LayoutDashboard,
+  PiggyBank,
+  Plus,
+  ReceiptText,
+  RefreshCw,
+  Target,
+  Trash2,
+  Upload,
+  WalletCards,
+} from 'lucide-react';
 
-const CATEGORIES = ['Income','Rent/Mortgage','Utilities','Phone/Internet','Fuel','Groceries','Kids','Insurance','Debt','Subscriptions','Business','Tools','Health','Fun','Savings','Tax','Other'];
-const todayISO = () => new Date().toISOString().slice(0,10);
-const addDays = (n) => { const d = new Date(); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); };
-const uid = () => crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
-function money(n,c='AUD'){ return new Intl.NumberFormat('en-AU',{style:'currency',currency:c}).format(Number.isFinite(Number(n))?Number(n):0); }
-function daysUntil(date){ return Math.round((new Date(date).getTime()-new Date(todayISO()).getTime())/86400000); }
-function monthKey(date){ return String(date||'').slice(0,7); }
-function useLocalStorage(key,fallback){ const [v,setV]=useState(fallback); useEffect(()=>{try{const s=localStorage.getItem(key); if(s) setV(JSON.parse(s));}catch{}},[key]); useEffect(()=>{try{localStorage.setItem(key,JSON.stringify(v));}catch{}},[key,v]); return [v,setV]; }
+const today = () => new Date().toISOString().slice(0, 10);
+const addDays = (days) => {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+};
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2));
+const money = (value, currency = 'AUD') =>
+  new Intl.NumberFormat('en-AU', { style: 'currency', currency }).format(Number(value) || 0);
+const pct = (value) => `${Math.max(0, Math.min(100, Number(value) || 0)).toFixed(0)}%`;
+const daysUntil = (date) => Math.ceil((new Date(date) - new Date(today())) / 86400000);
 
-const starterTransactions=[
-{id:uid(),date:addDays(-10),type:'income',description:'Main pay',category:'Income',amount:1250,account:'Everyday',billName:'',taxDeductible:false,gstIncluded:false,notes:'Weekly pay'},
-{id:uid(),date:addDays(-8),type:'expense',description:'Groceries',category:'Groceries',amount:210,account:'Everyday',billName:'',taxDeductible:false,gstIncluded:false,notes:''},
-{id:uid(),date:addDays(-4),type:'expense',description:'Fuel',category:'Fuel',amount:80,account:'Everyday',billName:'',taxDeductible:true,gstIncluded:true,notes:'Work travel'},
-{id:uid(),date:addDays(-2),type:'saving',description:'Emergency buffer',category:'Savings',amount:100,account:'Savings',billName:'',taxDeductible:false,gstIncluded:false,notes:''}
-];
-const starterBills=[
-{id:uid(),name:'Rent / Mortgage',amount:450,dueDate:addDays(3),frequency:'weekly',category:'Rent/Mortgage',paid:false,autopay:false,reminderDays:3,notes:'Main housing payment'},
-{id:uid(),name:'Electricity',amount:180,dueDate:addDays(11),frequency:'quarterly',category:'Utilities',paid:false,autopay:false,reminderDays:7,notes:''},
-{id:uid(),name:'Phone',amount:65,dueDate:addDays(7),frequency:'monthly',category:'Phone/Internet',paid:false,autopay:true,reminderDays:3,notes:''}
-];
-const starterIncome=[{id:uid(),source:'Main pay',amount:1250,nextDate:addDays(5),frequency:'weekly',taxable:true,notes:''}];
+function useLocalStorage(key, fallback) {
+  const [value, setValue] = useState(fallback);
 
-export default function App(){
- const [tab,setTab]=useState('dashboard');
- const [transactions,setTransactions]=useLocalStorage('moneytalks_transactions',starterTransactions);
- const [bills,setBills]=useLocalStorage('moneytalks_bills',starterBills);
- const [income,setIncome]=useLocalStorage('moneytalks_income',starterIncome);
- const [settings,setSettings]=useLocalStorage('moneytalks_settings',{currency:'AUD',taxRate:25,savingsGoal:2000,safetyBuffer:500});
- const [monthOffset,setMonthOffset]=useState(0);
- const summary=useMemo(()=>buildSummary(transactions,settings),[transactions,settings]);
- function exportBackup(){downloadFile('moneytalks-backup.json',JSON.stringify({transactions,bills,income,settings},null,2),'application/json');}
- function importBackup(file){const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(String(r.result)); if(Array.isArray(d.transactions))setTransactions(d.transactions); if(Array.isArray(d.bills))setBills(d.bills); if(Array.isArray(d.income))setIncome(d.income); if(d.settings)setSettings(d.settings);}catch{alert('Backup import failed.')}}; r.readAsText(file);}
- function exportCsv(){const rows=[['date','type','description','category','amount','account','billName','taxDeductible','gstIncluded','notes'],...transactions.map(t=>[t.date,t.type,t.description,t.category,t.amount,t.account,t.billName,t.taxDeductible,t.gstIncluded,t.notes])]; downloadFile('moneytalks-transactions.csv',toCsv(rows),'text/csv');}
- function importCsv(file){const r=new FileReader(); r.onload=()=>{const rows=parseCsv(String(r.result||'')); if(!rows.length)return alert('No rows found.'); const [headers,...body]=rows; const hs=headers.map(h=>h.trim().toLowerCase().replaceAll(' ','')); const imported=body.filter(row=>row.some(Boolean)).map(row=>{const o={}; hs.forEach((h,i)=>o[h]=row[i]||''); const amount=Number(String(o.amount||o.debit||o.credit||'0').replace(/[^0-9.-]/g,'')); const desc=o.description||o.details||o.transaction||o.narration||'Imported transaction'; const isIncome=Number(o.credit||0)>0||String(o.type).toLowerCase()==='income'; return {id:uid(),date:o.date||o.transactiondate||todayISO(),type:o.type||(isIncome?'income':'expense'),description:desc,category:o.category||autoCategory(desc),amount:Math.abs(amount),account:o.account||'Imported',billName:o.billname||'',taxDeductible:String(o.taxdeductible).toLowerCase()==='true',gstIncluded:String(o.gstincluded).toLowerCase()==='true',notes:o.notes||'Imported CSV'};}); setTransactions(prev=>[...imported,...prev]); alert(`Imported ${imported.length} rows.`);}; r.readAsText(file);}
- return <main className="app-shell"><header className="topbar"><div className="brand"><div className="logo"><FileSpreadsheet/></div><span>MoneyTalks Ledger</span></div><div className="actions"><button className="btn secondary" onClick={exportBackup}><Download size={16}/> Backup</button><label className="btn secondary"><Upload size={16}/> Restore<input hidden type="file" accept="application/json" onChange={e=>e.target.files?.[0]&&importBackup(e.target.files[0])}/></label></div></header><nav className="nav">{[['dashboard','Dashboard',BarChart3],['transactions','Spreadsheet',FileSpreadsheet],['bills','Bills',Bell],['income','Income',Wallet],['calendar','Calendar',CalendarDays],['tax','Tax',ReceiptText],['bank','Bank Sync',Banknote],['tools','Tools',Calculator]].map(([id,name,Icon])=><button key={id} className={tab===id?'active':''} onClick={()=>setTab(id)}><Icon size={16}/>{name}</button>)}</nav>{tab==='dashboard'&&<Dashboard summary={summary} transactions={transactions} bills={bills} income={income} settings={settings} setTab={setTab}/>} {tab==='transactions'&&<TransactionsPage transactions={transactions} setTransactions={setTransactions} settings={settings} exportCsv={exportCsv} importCsv={importCsv}/>} {tab==='bills'&&<BillsPage bills={bills} setBills={setBills} settings={settings} setTransactions={setTransactions}/>} {tab==='income'&&<IncomePage income={income} setIncome={setIncome} settings={settings} setTransactions={setTransactions}/>} {tab==='calendar'&&<CalendarPage bills={bills} income={income} settings={settings} monthOffset={monthOffset} setMonthOffset={setMonthOffset}/>} {tab==='tax'&&<TaxPage transactions={transactions} settings={settings} setSettings={setSettings} exportCsv={exportCsv}/>} {tab==='bank'&&<BankSyncPage importCsv={importCsv}/>} {tab==='tools'&&<ToolsPage settings={settings} setSettings={setSettings} summary={summary}/>}</main>;
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(key);
+      if (stored) setValue(JSON.parse(stored));
+    } catch {
+      setValue(fallback);
+    }
+  }, [key]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch {
+      // Local storage can be disabled in private browser contexts.
+    }
+  }, [key, value]);
+
+  return [value, setValue];
 }
 
-function Dashboard({summary,transactions,bills,income,settings,setTab}){const trend=buildTrend(transactions); const bars=buildCategoryBars(transactions); const reminders=bills.filter(b=>!b.paid).map(b=>({...b,days:daysUntil(b.dueDate)})).filter(b=>b.days<=Number(b.reminderDays||3)||b.days<=7).sort((a,b)=>a.days-b.days); return <><section className="hero"><div className="pills"><span className="pill teal"><FileSpreadsheet size={13}/> Spreadsheet-first</span><span className="pill green">Everything editable</span><span className="pill orange">Bills + income + tax</span></div><h1>Your money, in one readable ledger.</h1><p>Track every in and out, bills, savings, tax, income, reminders and CSV bank imports. Built like a spreadsheet so you can edit anything quickly.</p><div className="actions"><button className="btn" onClick={()=>setTab('transactions')}><FileSpreadsheet size={16}/> Open Spreadsheet</button><button className="btn green" onClick={()=>setTab('bills')}><Bell size={16}/> Bills</button><button className="btn orange" onClick={()=>setTab('bank')}><Banknote size={16}/> Import Bank CSV</button></div></section><section className="grid stats"><Stat label="Incoming" value={money(summary.incoming,settings.currency)}/><Stat label="Outgoing" value={money(summary.outgoing,settings.currency)}/><Stat label="Savings" value={money(summary.savings,settings.currency)}/><Stat label="Net position" value={money(summary.net,settings.currency)}/><Stat label="Tax estimate" value={money(summary.taxEstimate,settings.currency)}/><Stat label="GST credits" value={money(summary.gstCredits,settings.currency)}/></section><section className="grid two" style={{marginTop:16}}><Panel title="Incoming / outgoing / savings graph"><LineChart data={trend} currency={settings.currency}/></Panel><Panel title="Spending by category"><Bars data={bars} currency={settings.currency}/></Panel></section><section className="grid dashboard-main" style={{marginTop:16}}><Panel title="Bill reminders"><div className="reminder-list">{reminders.length===0&&<div className="reminder-item">No urgent bills right now.</div>}{reminders.map(b=><div className="reminder-item" key={b.id}><strong>{b.name}</strong><div>{money(b.amount,settings.currency)} due {b.dueDate}</div><div className="muted">{b.days<0?`${Math.abs(b.days)} days overdue`:`${b.days} days away`}</div></div>)}</div></Panel><Panel title="Quick income view"><div className="sheet-wrap"><table className="sheet-table"><thead><tr><th>Source</th><th>Amount</th><th>Next Date</th><th>Frequency</th></tr></thead><tbody>{income.map(i=><tr key={i.id}><td>{i.source}</td><td>{money(i.amount,settings.currency)}</td><td>{i.nextDate}</td><td>{i.frequency}</td></tr>)}</tbody></table></div></Panel></section></>}
-function TransactionsPage({transactions,setTransactions,exportCsv,importCsv}){function add(){setTransactions(p=>[{id:uid(),date:todayISO(),type:'expense',description:'',category:'Other',amount:0,account:'',billName:'',taxDeductible:false,gstIncluded:false,notes:''},...p])} function upd(id,f,v){setTransactions(p=>p.map(r=>r.id===id?{...r,[f]:v}:r))} return <Panel title="Spreadsheet Ledger"><div className="actions" style={{marginBottom:12}}><button className="btn" onClick={add}><Plus size={16}/> Add row</button><button className="btn secondary" onClick={exportCsv}><Download size={16}/> Export CSV</button><label className="btn secondary"><Upload size={16}/> Import CSV<input hidden type="file" accept=".csv,text/csv" onChange={e=>e.target.files?.[0]&&importCsv(e.target.files[0])}/></label></div><div className="sheet-wrap"><table className="sheet-table"><thead><tr><th>Date</th><th>Type</th><th>Description</th><th>Category</th><th>Amount</th><th>Account</th><th>Linked Bill</th><th>Tax Deductible</th><th>GST</th><th>Notes</th><th></th></tr></thead><tbody>{transactions.map(row=><tr key={row.id}><td><input type="date" value={row.date} onChange={e=>upd(row.id,'date',e.target.value)}/></td><td><select value={row.type} onChange={e=>upd(row.id,'type',e.target.value)}><option>income</option><option>expense</option><option>saving</option><option>tax</option></select></td><td><input value={row.description} onChange={e=>upd(row.id,'description',e.target.value)}/></td><td><select value={row.category} onChange={e=>upd(row.id,'category',e.target.value)}>{CATEGORIES.map(c=><option key={c}>{c}</option>)}</select></td><td><input type="number" value={row.amount} onChange={e=>upd(row.id,'amount',Number(e.target.value))}/></td><td><input value={row.account} onChange={e=>upd(row.id,'account',e.target.value)}/></td><td><input value={row.billName} onChange={e=>upd(row.id,'billName',e.target.value)}/></td><td><input type="checkbox" checked={!!row.taxDeductible} onChange={e=>upd(row.id,'taxDeductible',e.target.checked)}/></td><td><input type="checkbox" checked={!!row.gstIncluded} onChange={e=>upd(row.id,'gstIncluded',e.target.checked)}/></td><td><input value={row.notes} onChange={e=>upd(row.id,'notes',e.target.value)}/></td><td><button className="icon-btn" onClick={()=>setTransactions(p=>p.filter(x=>x.id!==row.id))}><Trash2 size={14}/></button></td></tr>)}</tbody></table></div></Panel>}
-function BillsPage({bills,setBills,settings,setTransactions}){function add(){setBills(p=>[{id:uid(),name:'',amount:0,dueDate:todayISO(),frequency:'monthly',category:'Other',paid:false,autopay:false,reminderDays:3,notes:''},...p])} function upd(id,f,v){setBills(p=>p.map(b=>b.id===id?{...b,[f]:v}:b))} function markPaid(b){setTransactions(p=>[{id:uid(),date:todayISO(),type:'expense',description:b.name,category:b.category,amount:Number(b.amount),account:'',billName:b.name,taxDeductible:false,gstIncluded:false,notes:'Marked paid from bills'},...p]); upd(b.id,'paid',true)} return <Panel title="Bills Spreadsheet"><div className="actions" style={{marginBottom:12}}><button className="btn" onClick={add}><Plus size={16}/> Add bill</button></div><div className="sheet-wrap"><table className="sheet-table"><thead><tr><th>Name</th><th>Amount</th><th>Due Date</th><th>Frequency</th><th>Category</th><th>Reminder Days</th><th>Autopay</th><th>Paid</th><th>Notes</th><th></th></tr></thead><tbody>{bills.map(b=><tr key={b.id}><td><input value={b.name} onChange={e=>upd(b.id,'name',e.target.value)}/></td><td><input type="number" value={b.amount} onChange={e=>upd(b.id,'amount',Number(e.target.value))}/></td><td><input type="date" value={b.dueDate} onChange={e=>upd(b.id,'dueDate',e.target.value)}/></td><td><select value={b.frequency} onChange={e=>upd(b.id,'frequency',e.target.value)}>{['once','weekly','fortnightly','monthly','quarterly','yearly'].map(x=><option key={x}>{x}</option>)}</select></td><td><select value={b.category} onChange={e=>upd(b.id,'category',e.target.value)}>{CATEGORIES.map(c=><option key={c}>{c}</option>)}</select></td><td><input type="number" value={b.reminderDays} onChange={e=>upd(b.id,'reminderDays',Number(e.target.value))}/></td><td><input type="checkbox" checked={!!b.autopay} onChange={e=>upd(b.id,'autopay',e.target.checked)}/></td><td><input type="checkbox" checked={!!b.paid} onChange={e=>upd(b.id,'paid',e.target.checked)}/></td><td><input value={b.notes} onChange={e=>upd(b.id,'notes',e.target.value)}/></td><td className="actions"><button className="icon-btn" onClick={()=>markPaid(b)}><Save size={14}/></button><button className="icon-btn" onClick={()=>setBills(p=>p.filter(x=>x.id!==b.id))}><Trash2 size={14}/></button></td></tr>)}</tbody></table></div></Panel>}
-function IncomePage({income,setIncome,settings,setTransactions}){function add(){setIncome(p=>[{id:uid(),source:'',amount:0,nextDate:todayISO(),frequency:'weekly',taxable:true,notes:''},...p])} function upd(id,f,v){setIncome(p=>p.map(i=>i.id===id?{...i,[f]:v}:i))} function log(i){setTransactions(p=>[{id:uid(),date:todayISO(),type:'income',description:i.source,category:'Income',amount:Number(i.amount),account:'',billName:'',taxDeductible:false,gstIncluded:false,notes:'Logged from income'},...p])} return <Panel title="Income Spreadsheet"><div className="actions" style={{marginBottom:12}}><button className="btn green" onClick={add}><Plus size={16}/> Add income</button></div><div className="sheet-wrap"><table className="sheet-table"><thead><tr><th>Source</th><th>Amount</th><th>Next Date</th><th>Frequency</th><th>Taxable</th><th>Notes</th><th></th></tr></thead><tbody>{income.map(i=><tr key={i.id}><td><input value={i.source} onChange={e=>upd(i.id,'source',e.target.value)}/></td><td><input type="number" value={i.amount} onChange={e=>upd(i.id,'amount',Number(e.target.value))}/></td><td><input type="date" value={i.nextDate} onChange={e=>upd(i.id,'nextDate',e.target.value)}/></td><td><select value={i.frequency} onChange={e=>upd(i.id,'frequency',e.target.value)}>{['once','weekly','fortnightly','monthly'].map(x=><option key={x}>{x}</option>)}</select></td><td><input type="checkbox" checked={!!i.taxable} onChange={e=>upd(i.id,'taxable',e.target.checked)}/></td><td><input value={i.notes} onChange={e=>upd(i.id,'notes',e.target.value)}/></td><td className="actions"><button className="icon-btn" onClick={()=>log(i)}><Save size={14}/></button><button className="icon-btn" onClick={()=>setIncome(p=>p.filter(x=>x.id!==i.id))}><Trash2 size={14}/></button></td></tr>)}</tbody></table></div></Panel>}
-function CalendarPage({bills,income,settings,monthOffset,setMonthOffset}){const base=new Date(); base.setMonth(base.getMonth()+monthOffset); const y=base.getFullYear(),m=base.getMonth(); const start=new Date(y,m,1),end=new Date(y,m+1,0); const blanks=(start.getDay()+6)%7; const days=Array.from({length:blanks+end.getDate()},(_,i)=>i<blanks?null:i-blanks+1); return <Panel title="Calendar"><div className="actions" style={{marginBottom:12}}><button className="btn secondary" onClick={()=>setMonthOffset(v=>v-1)}>Previous</button><button className="btn secondary" onClick={()=>setMonthOffset(0)}>Today</button><button className="btn secondary" onClick={()=>setMonthOffset(v=>v+1)}>Next</button></div><h2>{base.toLocaleString('en-AU',{month:'long',year:'numeric'})}</h2><div className="calendar">{['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=><div className="day-head" key={d}>{d}</div>)}{days.map((day,i)=>{if(!day)return <div key={i}/>; const iso=new Date(y,m,day+1).toISOString().slice(0,10); const bs=bills.filter(b=>b.dueDate===iso); const incs=income.filter(inc=>inc.nextDate===iso); return <div className={`day ${iso===todayISO()?'today':''}`} key={i}><strong>{day}</strong>{bs.map(b=><div className="cal-item cal-bill" key={b.id}>{b.name} {money(b.amount,settings.currency)}</div>)}{incs.map(inc=><div className="cal-item cal-income" key={inc.id}>{inc.source} {money(inc.amount,settings.currency)}</div>)}</div>})}</div></Panel>}
-function TaxPage({transactions,settings,setSettings,exportCsv}){const incomeTotal=transactions.filter(t=>t.type==='income').reduce((s,t)=>s+Number(t.amount||0),0); const deductible=transactions.filter(t=>t.taxDeductible).reduce((s,t)=>s+Number(t.amount||0),0); const gstCredits=transactions.filter(t=>t.gstIncluded).reduce((s,t)=>s+Number(t.amount||0)/11,0); const taxable=Math.max(0,incomeTotal-deductible); const taxEstimate=taxable*(Number(settings.taxRate||0)/100); return <><section className="grid stats"><Stat label="Income tracked" value={money(incomeTotal,settings.currency)}/><Stat label="Deductions" value={money(deductible,settings.currency)}/><Stat label="Taxable estimate" value={money(taxable,settings.currency)}/><Stat label="Tax estimate" value={money(taxEstimate,settings.currency)}/><Stat label="GST credits" value={money(gstCredits,settings.currency)}/><Stat label="Tax rate" value={`${settings.taxRate}%`}/></section><Panel title="Tax System"><div className="warning"><AlertTriangle size={16}/> This is a tracker and estimate only, not tax advice. Keep receipts and check with an accountant.</div><br/><div className="form-grid"><div className="field"><label>Tax rate estimate %</label><input type="number" value={settings.taxRate} onChange={e=>setSettings({...settings,taxRate:Number(e.target.value)})}/></div><div className="field"><label>Currency</label><input value={settings.currency} onChange={e=>setSettings({...settings,currency:e.target.value.toUpperCase()})}/></div></div><br/><button className="btn secondary" onClick={exportCsv}><Download size={16}/> Export transactions for accountant</button></Panel></>}
-function BankSyncPage({importCsv}){return <Panel title="Commonwealth / Bank Sync"><div className="bank-card"><h3>Safe version now: CSV import</h3><p className="muted">Export transactions from your bank, then import the CSV here. The app will try to map date, description and amount columns.</p><label className="btn orange"><Upload size={16}/> Import bank CSV<input hidden type="file" accept=".csv,text/csv" onChange={e=>e.target.files?.[0]&&importCsv(e.target.files[0])}/></label></div><br/><div className="bank-card"><h3>Real automatic CommBank sync</h3><p>Automatic Commonwealth Bank syncing should use Open Banking through Australia's Consumer Data Right with an accredited provider. Do not use NetBank password scraping or store bank passwords.</p><p className="muted">Future build path: add a backend, connect to a CDR/Open Banking provider, store tokens server-side, then sync accounts and transactions into this ledger.</p></div></Panel>}
-function ToolsPage({settings,setSettings,summary}){const [loan,setLoan]=useState({amount:5000,rate:12,months:36}); const [target,setTarget]=useState({goal:settings.savingsGoal,current:summary.savings,months:12}); const mr=Number(loan.rate)/100/12; const loanPay=mr?(loan.amount*mr)/(1-Math.pow(1+mr,-loan.months)):loan.amount/loan.months; return <section className="grid two"><Panel title="Calculators"><div className="grid two"><div className="bank-card"><h3>Loan repayment</h3><div className="form-grid"><input type="number" value={loan.amount} onChange={e=>setLoan({...loan,amount:Number(e.target.value)})}/><input type="number" value={loan.rate} onChange={e=>setLoan({...loan,rate:Number(e.target.value)})}/><input type="number" value={loan.months} onChange={e=>setLoan({...loan,months:Number(e.target.value)})}/></div><h2>{money(loanPay||0,settings.currency)} / month</h2></div><div className="bank-card"><h3>Savings target</h3><div className="form-grid"><input type="number" value={target.goal} onChange={e=>setTarget({...target,goal:Number(e.target.value)})}/><input type="number" value={target.current} onChange={e=>setTarget({...target,current:Number(e.target.value)})}/><input type="number" value={target.months} onChange={e=>setTarget({...target,months:Number(e.target.value)})}/></div><h2>{money((target.goal-target.current)/Math.max(1,target.months),settings.currency)} / month</h2></div></div></Panel><Panel title="App Settings"><div className="form-grid"><div className="field"><label>Currency</label><input value={settings.currency} onChange={e=>setSettings({...settings,currency:e.target.value.toUpperCase()})}/></div><div className="field"><label>Savings goal</label><input type="number" value={settings.savingsGoal} onChange={e=>setSettings({...settings,savingsGoal:Number(e.target.value)})}/></div><div className="field"><label>Safety buffer</label><input type="number" value={settings.safetyBuffer} onChange={e=>setSettings({...settings,safetyBuffer:Number(e.target.value)})}/></div></div></Panel></section>}
-function Panel({title,children}){return <section className="panel"><div className="panel-title"><h2>{title}</h2></div>{children}</section>}
-function Stat({label,value}){return <div className="stat"><div className="stat-label">{label}</div><div className="stat-value">{value}</div></div>}
-function LineChart({data,currency}){const max=Math.max(...data.flatMap(d=>[d.income,d.outgoing,d.saving]),1); const pts=k=>data.map((d,i)=>`${40+i*(300/Math.max(1,data.length-1))},${210-(d[k]/max)*170}`).join(' '); return <div className="chart-box"><svg className="svg-chart" viewBox="0 0 380 245"><line className="axis" x1="35" y1="215" x2="360" y2="215"/><line className="axis" x1="35" y1="25" x2="35" y2="215"/><polyline points={pts('income')} className="income-line"/><polyline points={pts('outgoing')} className="out-line"/><polyline points={pts('saving')} className="saving-line"/>{data.map((d,i)=><text key={d.label} x={40+i*(300/Math.max(1,data.length-1))} y="238" fontSize="11" textAnchor="middle" fill="#667085">{d.label}</text>)}</svg><div className="pills"><span className="pill teal">Incoming</span><span className="pill orange">Outgoing</span><span className="pill">Savings</span><span className="muted">Max {money(max,currency)}</span></div></div>}
-function Bars({data,currency}){const max=Math.max(...data.map(d=>d.total),1); return <div className="chart-box"><div className="bar-list">{(data.length?data:[{category:'No data yet',total:0}]).slice(0,10).map(d=><div className="bar-row" key={d.category}><span>{d.category}</span><div className="bar"><div style={{width:`${(d.total/max)*100}%`}}/></div><span>{money(d.total,currency)}</span></div>)}</div></div>}
-function buildSummary(transactions,settings){const incoming=transactions.filter(t=>t.type==='income').reduce((s,t)=>s+Number(t.amount||0),0); const outgoing=transactions.filter(t=>t.type==='expense').reduce((s,t)=>s+Number(t.amount||0),0); const savings=transactions.filter(t=>t.type==='saving'||t.category==='Savings').reduce((s,t)=>s+Number(t.amount||0),0); const taxPaid=transactions.filter(t=>t.type==='tax'||t.category==='Tax').reduce((s,t)=>s+Number(t.amount||0),0); const deductible=transactions.filter(t=>t.taxDeductible).reduce((s,t)=>s+Number(t.amount||0),0); const gstCredits=transactions.filter(t=>t.gstIncluded).reduce((s,t)=>s+Number(t.amount||0)/11,0); const taxEstimate=Math.max(0,incoming-deductible)*(Number(settings.taxRate||0)/100); return {incoming,outgoing,savings,taxPaid,deductible,gstCredits,taxEstimate,net:incoming-outgoing-savings-taxPaid}}
-function buildTrend(transactions){const now=new Date(); const months=[]; for(let i=5;i>=0;i--){const d=new Date(now.getFullYear(),now.getMonth()-i,1); const key=d.toISOString().slice(0,7); const rows=transactions.filter(t=>monthKey(t.date)===key); months.push({label:d.toLocaleString('en-AU',{month:'short'}),income:rows.filter(t=>t.type==='income').reduce((s,t)=>s+Number(t.amount||0),0),outgoing:rows.filter(t=>t.type==='expense').reduce((s,t)=>s+Number(t.amount||0),0),saving:rows.filter(t=>t.type==='saving'||t.category==='Savings').reduce((s,t)=>s+Number(t.amount||0),0)});} return months;}
-function buildCategoryBars(transactions){return CATEGORIES.map(category=>({category,total:transactions.filter(t=>t.type==='expense'&&t.category===category).reduce((s,t)=>s+Number(t.amount||0),0)})).filter(x=>x.total>0).sort((a,b)=>b.total-a.total)}
-function downloadFile(name,text,type){const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([text],{type})); a.download=name; a.click();}
-function toCsv(rows){return rows.map(r=>r.map(cell=>`"${String(cell??'').replaceAll('"','""')}"`).join(',')).join('\n')}
-function parseCsv(text){const rows=[];let row=[],cell='',q=false;for(let i=0;i<text.length;i++){const ch=text[i],nx=text[i+1];if(ch==='"'&&q&&nx==='"'){cell+='"';i++;}else if(ch==='"'){q=!q;}else if(ch===','&&!q){row.push(cell);cell='';}else if((ch==='\n'||ch==='\r')&&!q){if(cell||row.length){row.push(cell);rows.push(row);row=[];cell='';} if(ch==='\r'&&nx==='\n')i++;}else cell+=ch;} if(cell||row.length){row.push(cell);rows.push(row);} return rows;}
-function autoCategory(text){const t=String(text||'').toLowerCase(); if(t.includes('woolworths')||t.includes('coles')||t.includes('aldi'))return 'Groceries'; if(t.includes('fuel')||t.includes('shell')||t.includes('bp')||t.includes('otr'))return 'Fuel'; if(t.includes('rent'))return 'Rent/Mortgage'; if(t.includes('telstra')||t.includes('optus')||t.includes('vodafone'))return 'Phone/Internet'; if(t.includes('insurance'))return 'Insurance'; if(t.includes('netflix')||t.includes('spotify')||t.includes('subscription'))return 'Subscriptions'; return 'Other';}
+const starter = {
+  settings: { currency: 'AUD', bufferTarget: 1200 },
+  income: [
+    { id: uid(), area: 'Main income', source: 'Weekly pay', amount: 1250, frequency: 'weekly', nextDate: addDays(4) },
+    { id: uid(), area: 'Side income', source: 'Weekend work', amount: 220, frequency: 'fortnightly', nextDate: addDays(9) },
+    { id: uid(), area: 'Other income', source: 'Marketplace sales', amount: 90, frequency: 'monthly', nextDate: addDays(16) },
+  ],
+  bills: [
+    { id: uid(), name: 'Rent', category: 'Housing', amount: 450, dueDate: addDays(3), frequency: 'weekly', paid: false },
+    { id: uid(), name: 'Electricity', category: 'Utilities', amount: 180, dueDate: addDays(12), frequency: 'quarterly', paid: false },
+    { id: uid(), name: 'Phone', category: 'Phone', amount: 65, dueDate: addDays(7), frequency: 'monthly', paid: true },
+  ],
+  debts: [
+    { id: uid(), name: 'Credit card', balance: 3200, rate: 19.9, payment: 180, priority: 'avalanche' },
+    { id: uid(), name: 'Car loan', balance: 9200, rate: 8.2, payment: 360, priority: 'snowball' },
+  ],
+  savings: [
+    { id: uid(), name: 'Emergency buffer', target: 3000, saved: 900, contribution: 150 },
+    { id: uid(), name: 'Holiday', target: 1800, saved: 420, contribution: 80 },
+  ],
+};
+
+export default function App() {
+  const [settings, setSettings] = useLocalStorage('moneytalks_settings_v2', starter.settings);
+  const [income, setIncome] = useLocalStorage('moneytalks_income_v2', starter.income);
+  const [bills, setBills] = useLocalStorage('moneytalks_bills_v2', starter.bills);
+  const [debts, setDebts] = useLocalStorage('moneytalks_debts_v2', starter.debts);
+  const [savings, setSavings] = useLocalStorage('moneytalks_savings_v2', starter.savings);
+  const [view, setView] = useState('overview');
+
+  const totals = useMemo(() => {
+    const incomeTotal = income.reduce((sum, item) => sum + monthlyAmount(item.amount, item.frequency), 0);
+    const billTotal = bills.reduce((sum, item) => sum + monthlyAmount(item.amount, item.frequency), 0);
+    const debtTotal = debts.reduce((sum, item) => sum + Number(item.payment || 0), 0);
+    const savingsTotal = savings.reduce((sum, item) => sum + Number(item.contribution || 0), 0);
+    const savedTotal = savings.reduce((sum, item) => sum + Number(item.saved || 0), 0);
+    const savingTarget = savings.reduce((sum, item) => sum + Number(item.target || 0), 0);
+    const debtBalance = debts.reduce((sum, item) => sum + Number(item.balance || 0), 0);
+    const left = incomeTotal - billTotal - debtTotal - savingsTotal;
+    return { incomeTotal, billTotal, debtTotal, savingsTotal, savedTotal, savingTarget, debtBalance, left };
+  }, [income, bills, debts, savings]);
+
+  function exportData() {
+    downloadFile('moneytalks-budget-backup.json', JSON.stringify({ settings, income, bills, debts, savings }, null, 2));
+  }
+
+  function importData(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const data = JSON.parse(String(reader.result || '{}'));
+        if (data.settings) setSettings(data.settings);
+        if (Array.isArray(data.income)) setIncome(data.income);
+        if (Array.isArray(data.bills)) setBills(data.bills);
+        if (Array.isArray(data.debts)) setDebts(data.debts);
+        if (Array.isArray(data.savings)) setSavings(data.savings);
+      } catch {
+        alert('That backup file could not be imported.');
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  function resetDemo() {
+    if (!confirm('Replace the current data with the starter budget?')) return;
+    setSettings(starter.settings);
+    setIncome(starter.income);
+    setBills(starter.bills);
+    setDebts(starter.debts);
+    setSavings(starter.savings);
+  }
+
+  const chartRows = [
+    { label: 'Bills', value: totals.billTotal, color: 'var(--orange)' },
+    { label: 'Debt', value: totals.debtTotal, color: 'var(--red)' },
+    { label: 'Savings', value: totals.savingsTotal, color: 'var(--green)' },
+    { label: 'Spare', value: Math.max(0, totals.left), color: 'var(--blue)' },
+  ];
+
+  return (
+    <main className="app-shell">
+      <header className="topbar">
+        <div className="brand">
+          <div className="logo"><WalletCards size={26} /></div>
+          <div>
+            <p>MoneyTalks</p>
+            <h1>Personal Budget Hub</h1>
+          </div>
+        </div>
+        <div className="top-actions">
+          <button className="icon-action" type="button" onClick={exportData} aria-label="Download backup"><Download size={18} /></button>
+          <label className="icon-action" aria-label="Upload backup">
+            <Upload size={18} />
+            <input hidden type="file" accept="application/json" onChange={(e) => e.target.files?.[0] && importData(e.target.files[0])} />
+          </label>
+          <button className="icon-action" type="button" onClick={resetDemo} aria-label="Reset demo data"><RefreshCw size={18} /></button>
+        </div>
+      </header>
+
+      <nav className="nav" aria-label="Budget sections">
+        {[
+          ['overview', 'Overview', LayoutDashboard],
+          ['income', 'Income', Banknote],
+          ['bills', 'Bills', ReceiptText],
+          ['debts', 'Debt', Landmark],
+          ['savings', 'Savings', PiggyBank],
+        ].map(([id, label, Icon]) => (
+          <button key={id} className={view === id ? 'active' : ''} type="button" onClick={() => setView(id)}>
+            <Icon size={17} />
+            {label}
+          </button>
+        ))}
+      </nav>
+
+      <section className="hero-panel">
+        <div>
+          <p className="eyebrow">Monthly plan</p>
+          <h2>{money(totals.left, settings.currency)} left to allocate</h2>
+          <p>Incoming money is split into three clear areas, then matched against bills, debt payments, and savings goals.</p>
+        </div>
+        <div className="hero-ring" style={{ '--progress': pct((totals.billTotal + totals.debtTotal + totals.savingsTotal) / Math.max(1, totals.incomeTotal) * 100) }}>
+          <strong>{pct((totals.billTotal + totals.debtTotal + totals.savingsTotal) / Math.max(1, totals.incomeTotal) * 100)}</strong>
+          <span>allocated</span>
+        </div>
+      </section>
+
+      <section className="stats-grid">
+        <Stat icon={ArrowDownToLine} label="Income" value={money(totals.incomeTotal, settings.currency)} />
+        <Stat icon={Bell} label="Bills" value={money(totals.billTotal, settings.currency)} />
+        <Stat icon={Landmark} label="Debt balance" value={money(totals.debtBalance, settings.currency)} />
+        <Stat icon={Target} label="Saved" value={`${pct((totals.savedTotal / Math.max(1, totals.savingTarget)) * 100)} funded`} />
+      </section>
+
+      {view === 'overview' && (
+        <Overview
+          settings={settings}
+          totals={totals}
+          chartRows={chartRows}
+          income={income}
+          bills={bills}
+          debts={debts}
+          savings={savings}
+          setView={setView}
+        />
+      )}
+      {view === 'income' && <IncomePage income={income} setIncome={setIncome} settings={settings} />}
+      {view === 'bills' && <BillsPage bills={bills} setBills={setBills} settings={settings} />}
+      {view === 'debts' && <DebtPage debts={debts} setDebts={setDebts} settings={settings} />}
+      {view === 'savings' && <SavingsPage savings={savings} setSavings={setSavings} settings={settings} />}
+    </main>
+  );
+}
+
+function Overview({ settings, totals, chartRows, income, bills, debts, savings, setView }) {
+  const dueSoon = bills
+    .filter((bill) => !bill.paid)
+    .map((bill) => ({ ...bill, days: daysUntil(bill.dueDate) }))
+    .sort((a, b) => a.days - b.days)
+    .slice(0, 4);
+  const debtFocus = [...debts].sort((a, b) => Number(b.rate || 0) - Number(a.rate || 0))[0];
+  const savingFocus = [...savings].sort((a, b) => progress(a) - progress(b))[0];
+
+  return (
+    <section className="overview-grid">
+      <Panel title="Money map" action={<button onClick={() => setView('income')}>Edit income</button>}>
+        <Donut rows={chartRows} total={totals.incomeTotal} currency={settings.currency} />
+      </Panel>
+      <Panel title="Cash flow chart">
+        <BarChart rows={[
+          { label: 'Income', value: totals.incomeTotal, color: 'var(--teal)' },
+          ...chartRows,
+        ]} currency={settings.currency} />
+      </Panel>
+      <Panel title="Income split">
+        <CompactList items={income} empty="Add your first income stream." render={(item) => (
+          <>
+            <strong>{item.area}</strong>
+            <span>{item.source} · {money(monthlyAmount(item.amount, item.frequency), settings.currency)} monthly</span>
+          </>
+        )} />
+      </Panel>
+      <Panel title="Bill organiser" action={<button onClick={() => setView('bills')}>Manage bills</button>}>
+        <CompactList items={dueSoon} empty="No bills due soon." render={(item) => (
+          <>
+            <strong>{item.name}</strong>
+            <span>{money(item.amount, settings.currency)} · {item.days < 0 ? `${Math.abs(item.days)} days overdue` : `due in ${item.days} days`}</span>
+          </>
+        )} />
+      </Panel>
+      <Panel title="Debt focus" action={<button onClick={() => setView('debts')}>Track debt</button>}>
+        {debtFocus ? <FocusCard title={debtFocus.name} value={money(debtFocus.balance, settings.currency)} detail={`${debtFocus.rate || 0}% interest · ${money(debtFocus.payment, settings.currency)} payment`} /> : <EmptyText text="Add a debt to track payoff progress." />}
+      </Panel>
+      <Panel title="Savings focus" action={<button onClick={() => setView('savings')}>Set goals</button>}>
+        {savingFocus ? <FocusCard title={savingFocus.name} value={pct(progress(savingFocus))} detail={`${money(savingFocus.saved, settings.currency)} of ${money(savingFocus.target, settings.currency)}`} /> : <EmptyText text="Add a savings goal to start building momentum." />}
+      </Panel>
+    </section>
+  );
+}
+
+function IncomePage({ income, setIncome, settings }) {
+  const grouped = ['Main income', 'Side income', 'Other income'];
+  return (
+    <section className="page-stack">
+      <QuickAdd title="Add income stream" fields={[
+        ['area', 'select', grouped],
+        ['source', 'text'],
+        ['amount', 'number'],
+        ['frequency', 'select', ['weekly', 'fortnightly', 'monthly', 'once']],
+        ['nextDate', 'date'],
+      ]} onAdd={(row) => setIncome((items) => [{ id: uid(), ...row, amount: Number(row.amount || 0) }, ...items])} />
+      <div className="three-column">
+        {grouped.map((area) => (
+          <Panel key={area} title={area}>
+            <EditableList
+              rows={income.filter((item) => item.area === area)}
+              fields={['source', 'amount', 'frequency', 'nextDate']}
+              currency={settings.currency}
+              onUpdate={(id, field, value) => setIncome((items) => update(items, id, field, field === 'amount' ? Number(value) : value))}
+              onDelete={(id) => setIncome((items) => items.filter((item) => item.id !== id))}
+            />
+          </Panel>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function BillsPage({ bills, setBills, settings }) {
+  return (
+    <section className="page-stack">
+      <QuickAdd title="Add bill" fields={[
+        ['name', 'text'],
+        ['category', 'select', ['Housing', 'Utilities', 'Phone', 'Insurance', 'Transport', 'Subscriptions', 'Other']],
+        ['amount', 'number'],
+        ['dueDate', 'date'],
+        ['frequency', 'select', ['weekly', 'fortnightly', 'monthly', 'quarterly', 'yearly', 'once']],
+      ]} onAdd={(row) => setBills((items) => [{ id: uid(), paid: false, ...row, amount: Number(row.amount || 0) }, ...items])} />
+      <Panel title="Bill organiser">
+        <EditableList
+          rows={[...bills].sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate))}
+          fields={['name', 'category', 'amount', 'dueDate', 'frequency', 'paid']}
+          currency={settings.currency}
+          onUpdate={(id, field, value) => setBills((items) => update(items, id, field, field === 'amount' ? Number(value) : value))}
+          onDelete={(id) => setBills((items) => items.filter((item) => item.id !== id))}
+        />
+      </Panel>
+    </section>
+  );
+}
+
+function DebtPage({ debts, setDebts, settings }) {
+  return (
+    <section className="page-stack">
+      <QuickAdd title="Add debt" fields={[
+        ['name', 'text'],
+        ['balance', 'number'],
+        ['rate', 'number'],
+        ['payment', 'number'],
+        ['priority', 'select', ['avalanche', 'snowball']],
+      ]} onAdd={(row) => setDebts((items) => [{ id: uid(), ...row, balance: Number(row.balance || 0), rate: Number(row.rate || 0), payment: Number(row.payment || 0) }, ...items])} />
+      <Panel title="Debt tracker">
+        <DebtCards debts={debts} setDebts={setDebts} currency={settings.currency} />
+      </Panel>
+    </section>
+  );
+}
+
+function SavingsPage({ savings, setSavings, settings }) {
+  return (
+    <section className="page-stack">
+      <QuickAdd title="Add savings goal" fields={[
+        ['name', 'text'],
+        ['target', 'number'],
+        ['saved', 'number'],
+        ['contribution', 'number'],
+      ]} onAdd={(row) => setSavings((items) => [{ id: uid(), ...row, target: Number(row.target || 0), saved: Number(row.saved || 0), contribution: Number(row.contribution || 0) }, ...items])} />
+      <Panel title="Savings goals">
+        <SavingCards savings={savings} setSavings={setSavings} currency={settings.currency} />
+      </Panel>
+    </section>
+  );
+}
+
+function QuickAdd({ title, fields, onAdd }) {
+  const initial = Object.fromEntries(fields.map(([name, type, options]) => [name, type === 'select' ? options[0] : type === 'date' ? today() : '']));
+  const [form, setForm] = useState(initial);
+
+  function submit(event) {
+    event.preventDefault();
+    onAdd(form);
+    setForm(initial);
+  }
+
+  return (
+    <form className="quick-add" onSubmit={submit}>
+      <h2><Plus size={18} />{title}</h2>
+      <div className="quick-fields">
+        {fields.map(([name, type, options]) => (
+          <label key={name}>
+            {labelize(name)}
+            {type === 'select' ? (
+              <select value={form[name]} onChange={(e) => setForm({ ...form, [name]: e.target.value })}>
+                {options.map((option) => <option key={option}>{option}</option>)}
+              </select>
+            ) : (
+              <input required type={type} value={form[name]} onChange={(e) => setForm({ ...form, [name]: e.target.value })} />
+            )}
+          </label>
+        ))}
+      </div>
+      <button className="primary-button" type="submit"><Plus size={17} />Add</button>
+    </form>
+  );
+}
+
+function EditableList({ rows, fields, currency, onUpdate, onDelete }) {
+  if (!rows.length) return <EmptyText text="Nothing here yet." />;
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>{fields.map((field) => <th key={field}>{labelize(field)}</th>)}<th></th></tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.id}>
+              {fields.map((field) => (
+                <td key={field}>
+                  {field === 'paid' ? (
+                    <input type="checkbox" checked={!!row[field]} onChange={(e) => onUpdate(row.id, field, e.target.checked)} />
+                  ) : field === 'frequency' || field === 'priority' || field === 'category' ? (
+                    <input value={row[field] || ''} onChange={(e) => onUpdate(row.id, field, e.target.value)} />
+                  ) : field.toLowerCase().includes('date') ? (
+                    <input type="date" value={row[field] || today()} onChange={(e) => onUpdate(row.id, field, e.target.value)} />
+                  ) : (
+                    <input type={['amount', 'balance', 'rate', 'payment', 'target', 'saved', 'contribution'].includes(field) ? 'number' : 'text'} value={row[field] ?? ''} onChange={(e) => onUpdate(row.id, field, e.target.value)} />
+                  )}
+                </td>
+              ))}
+              <td><button className="delete-button" type="button" onClick={() => onDelete(row.id)} aria-label="Delete row"><Trash2 size={16} /></button></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="table-note">Monthly amounts are calculated using your frequency. Currency: {currency}.</p>
+    </div>
+  );
+}
+
+function DebtCards({ debts, setDebts, currency }) {
+  if (!debts.length) return <EmptyText text="Add debts to compare balance, interest, and payment progress." />;
+  return <div className="card-grid">{debts.map((debt) => {
+    const months = Number(debt.payment) > 0 ? Math.ceil(Number(debt.balance) / Number(debt.payment)) : 0;
+    return (
+      <article className="tracker-card" key={debt.id}>
+        <div className="tracker-heading">
+          <Landmark size={20} />
+          <input value={debt.name} onChange={(e) => setDebts((items) => update(items, debt.id, 'name', e.target.value))} />
+          <button type="button" onClick={() => setDebts((items) => items.filter((item) => item.id !== debt.id))}><Trash2 size={16} /></button>
+        </div>
+        <div className="tracker-values">
+          <label>Balance<input type="number" value={debt.balance} onChange={(e) => setDebts((items) => update(items, debt.id, 'balance', Number(e.target.value)))} /></label>
+          <label>Interest<input type="number" value={debt.rate} onChange={(e) => setDebts((items) => update(items, debt.id, 'rate', Number(e.target.value)))} /></label>
+          <label>Payment<input type="number" value={debt.payment} onChange={(e) => setDebts((items) => update(items, debt.id, 'payment', Number(e.target.value)))} /></label>
+        </div>
+        <p>{money(debt.balance, currency)} balance · about {months || 'many'} months at this payment</p>
+      </article>
+    );
+  })}</div>;
+}
+
+function SavingCards({ savings, setSavings, currency }) {
+  if (!savings.length) return <EmptyText text="Add goals for emergency funds, holidays, deposits, or big purchases." />;
+  return <div className="card-grid">{savings.map((goal) => (
+    <article className="tracker-card" key={goal.id}>
+      <div className="tracker-heading">
+        <PiggyBank size={20} />
+        <input value={goal.name} onChange={(e) => setSavings((items) => update(items, goal.id, 'name', e.target.value))} />
+        <button type="button" onClick={() => setSavings((items) => items.filter((item) => item.id !== goal.id))}><Trash2 size={16} /></button>
+      </div>
+      <div className="progress-line"><span style={{ width: pct(progress(goal)) }} /></div>
+      <div className="tracker-values">
+        <label>Target<input type="number" value={goal.target} onChange={(e) => setSavings((items) => update(items, goal.id, 'target', Number(e.target.value)))} /></label>
+        <label>Saved<input type="number" value={goal.saved} onChange={(e) => setSavings((items) => update(items, goal.id, 'saved', Number(e.target.value)))} /></label>
+        <label>Monthly<input type="number" value={goal.contribution} onChange={(e) => setSavings((items) => update(items, goal.id, 'contribution', Number(e.target.value)))} /></label>
+      </div>
+      <p>{pct(progress(goal))} funded · {money(Math.max(0, goal.target - goal.saved), currency)} to go</p>
+    </article>
+  ))}</div>;
+}
+
+function Donut({ rows, total, currency }) {
+  const gradient = rows
+    .reduce((parts, row) => {
+      const start = parts.cursor;
+      const size = total > 0 ? (row.value / total) * 100 : 0;
+      parts.segments.push(`${row.color} ${start}% ${start + size}%`);
+      parts.cursor += size;
+      return parts;
+    }, { cursor: 0, segments: [] }).segments.join(',');
+  return (
+    <div className="donut-layout">
+      <div className="donut" style={{ background: `conic-gradient(${gradient || 'var(--line) 0 100%'})` }}>
+        <div><strong>{money(total, currency)}</strong><span>income</span></div>
+      </div>
+      <div className="legend">
+        {rows.map((row) => (
+          <div key={row.label}><i style={{ background: row.color }} />{row.label}<strong>{money(row.value, currency)}</strong></div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BarChart({ rows, currency }) {
+  const max = Math.max(1, ...rows.map((row) => row.value));
+  return <div className="bar-chart">{rows.map((row) => (
+    <div className="bar-row" key={row.label}>
+      <span>{row.label}</span>
+      <div><i style={{ width: pct((row.value / max) * 100), background: row.color }} /></div>
+      <strong>{money(row.value, currency)}</strong>
+    </div>
+  ))}</div>;
+}
+
+function Panel({ title, action, children }) {
+  return (
+    <section className="panel">
+      <div className="panel-heading">
+        <h2>{title}</h2>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function Stat({ icon: Icon, label, value }) {
+  return <article className="stat"><Icon size={21} /><span>{label}</span><strong>{value}</strong></article>;
+}
+
+function CompactList({ items, render, empty }) {
+  if (!items.length) return <EmptyText text={empty} />;
+  return <div className="compact-list">{items.map((item) => <article key={item.id}>{render(item)}</article>)}</div>;
+}
+
+function FocusCard({ title, value, detail }) {
+  return <div className="focus-card"><strong>{value}</strong><h3>{title}</h3><p>{detail}</p></div>;
+}
+
+function EmptyText({ text }) {
+  return <p className="empty-text">{text}</p>;
+}
+
+function monthlyAmount(amount, frequency) {
+  const value = Number(amount) || 0;
+  return ({ weekly: value * 52 / 12, fortnightly: value * 26 / 12, quarterly: value / 3, yearly: value / 12, once: value, monthly: value }[frequency] ?? value);
+}
+
+function progress(goal) {
+  return (Number(goal.saved || 0) / Math.max(1, Number(goal.target || 0))) * 100;
+}
+
+function update(items, id, field, value) {
+  return items.map((item) => (item.id === id ? { ...item, [field]: value } : item));
+}
+
+function labelize(value) {
+  return String(value).replace(/([A-Z])/g, ' $1').replace(/^./, (char) => char.toUpperCase());
+}
+
+function downloadFile(name, text) {
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+  link.download = name;
+  link.click();
+}
